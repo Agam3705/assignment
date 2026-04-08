@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Cloud Pong Pro | Agam Jindal</title>
+    <style>
+        :root {
+            --bg: #020617;
+            --card: #0f172a;
+            --accent: #38bdf8;
+            --ai: #f43f5e;
+            --player: #22c55e;
+            --text: #f8fafc;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', system-ui, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden; /* Prevents all scrolling */
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 20px;
+            width: 95vw;
+            height: 90vh; /* Fits within any screen height */
+            max-width: 1200px;
+        }
+
+        /* --- LEFT SIDE: GAME --- */
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--card);
+            border-radius: 20px;
+            padding: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+            position: relative;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .score-pill {
+            background: var(--bg);
+            padding: 8px 24px;
+            border-radius: 50px;
+            font-family: 'Monaco', monospace;
+            font-size: 1.8rem;
+            font-weight: 800;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            color: var(--accent);
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* --- RIGHT SIDE: CONTROLS --- */
+        .sidebar {
+            width: 300px;
+            background: var(--card);
+            border-radius: 20px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .panel-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
+            margin-bottom: 20px;
+            font-weight: 800;
+        }
+
+        .control-group {
+            margin-bottom: 22px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .stat-card {
+            background: var(--bg);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: auto;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            border-left: 4px solid var(--accent);
+        }
+
+        /* --- OVERLAYS --- */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        #statusText { font-size: 3rem; font-weight: 900; margin-bottom: 20px; }
+        .win { color: var(--player); }
+        .lose { color: var(--ai); }
+
+        .btn {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-weight: 800;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="game-area">
+            <div class="game-header">
+                <div style="font-weight: 800; color: var(--accent)">AWS PORTAL PONG</div>
+                <div class="score-pill" id="score">0 - 0</div>
+                <div style="font-size: 0.7rem; opacity: 0.5;">LIVE @ S3_STATIC_HOST</div>
+            </div>
+
+            <div class="canvas-container" id="container">
+                <canvas id="pong"></canvas>
+                
+                <div id="overlay">
+                    <div id="statusText">MATCH ENDED</div>
+                    <button class="btn" onclick="resetMatch()">RESTART ENGINE</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="panel-label">System Configuration</div>
+            
+            <div class="control-group">
+                <label>Player Paddle Width</label>
+                <input type="range" id="pWidth" min="60" max="200" value="100">
+            </div>
+
+            <div class="control-group">
+                <label>Neural Link Speed (Player)</label>
+                <input type="range" id="pSpeed" min="10" max="30" value="20">
+            </div>
+
+            <div class="control-group">
+                <label>AI Intelligence Core</label>
+                <input type="range" id="aiSpeed" min="4" max="18" value="8">
+            </div>
+
+            <div class="control-group">
+                <label>Ball Kinetic Energy</label>
+                <input type="range" id="bSpeed" min="6" max="22" value="10">
+            </div>
+
+            <div class="stat-card">
+                <b>INFRASTRUCTURE DETAILS</b><br>
+                Developer: Agam Jindal<br>
+                Host: Amazon S3 (Free Tier)<br>
+                Status: Operational
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("pong");
+        const ctx = canvas.getContext("2d");
+        const container = document.getElementById("container");
+        const scoreEl = document.getElementById("score");
+        const overlay = document.getElementById("overlay");
+        const statusText = document.getElementById("statusText");
+
+        let ball, player, ai, gameRunning = true;
+        const keys = {};
+
+        // Dynamic Sizing
+        function resize() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            initObjects();
+        }
+
+        function initObjects() {
+            const w = parseInt(document.getElementById("pWidth").value);
+            player = { x: canvas.width/2 - w/2, y: canvas.height - 20, w: w, h: 10, score: 0 };
+            ai = { x: canvas.width/2 - w/2, y: 10, w: w, h: 10, score: 0 };
+            resetBall();
+        }
+
+        function resetBall() {
+            const speed = parseInt(document.getElementById("bSpeed").value);
+            ball = { x: canvas.width/2, y: canvas.height/2, r: 8, dx: speed * (Math.random() > 0.5 ? 1 : -1), dy: speed };
+        }
+
+        function resetMatch() {
+            player.score = 0; ai.score = 0;
+            scoreEl.innerText = "0 - 0";
+            overlay.style.display = "none";
+            gameRunning = true;
+            resetBall();
+            loop();
+        }
+
+        window.addEventListener("keydown", e => keys[e.code] = true);
+        window.addEventListener("keyup", e => keys[e.code] = false);
+        window.addEventListener("resize", resize);
+
+        function update() {
+            if (!gameRunning) return;
+
+            const pSpeed = parseInt(document.getElementById("pSpeed").value);
+            const aSpeed = parseInt(document.getElementById("aiSpeed").value);
+            const pWidth = parseInt(document.getElementById("pWidth").value);
+            player.w = ai.w = pWidth;
+
+            // Player Move
+            if (keys["ArrowLeft"] && player.x > 0) player.x -= pSpeed;
+            if (keys["ArrowRight"] && player.x < canvas.width - player.w) player.x += pSpeed;
+
+            // AI Move
+            if (ai.x + ai.w/2 < ball.x - 20) ai.x += aSpeed;
+            else if (ai.x + ai.w/2 > ball.x + 20) ai.x -= aSpeed;
+
+            // Ball Physics
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // Wall Bounce
+            if (ball.x < 0 || ball.x > canvas.width) ball.dx *= -1;
+
+            // Paddle Collisions
+            if (ball.y < ai.y + ai.h && ball.x > ai.x && ball.x < ai.x + ai.w) {
+                ball.dy = Math.abs(ball.dy) * 1.05;
+                ball.y = ai.y + ai.h + 5;
+            }
+            if (ball.y > player.y - ball.r && ball.x > player.x && ball.x < player.x + player.w) {
+                ball.dy = -Math.abs(ball.dy) * 1.05;
+                ball.y = player.y - ball.r - 5;
+            }
+
+            // Scoring
+            if (ball.y < 0) { player.score++; finishPoint(); }
+            if (ball.y > canvas.height) { ai.score++; finishPoint(); }
+        }
+
+        function finishPoint() {
+            scoreEl.innerText = `${player.score} - ${ai.score}`;
+            if (player.score >= 6 || ai.score >= 6) {
+                gameRunning = false;
+                overlay.style.display = "flex";
+                statusText.innerText = player.score >= 6 ? "VICTORY" : "DEFEATED";
+                statusText.className = player.score >= 6 ? "win" : "lose";
+            } else {
+                resetBall();
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Center line
+            ctx.strokeStyle = "rgba(255,255,255,0.1)";
+            ctx.setLineDash([10, 10]);
+            ctx.strokeRect(0, canvas.height/2, canvas.width, 0);
+
+            // Paddles
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ai');
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.fillRect(ai.x, ai.y, ai.w, ai.h);
+
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+
+            // Ball
+            ctx.fillStyle = "#fff";
+            ctx.shadowColor = "#fff";
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        function loop() {
+            if (!gameRunning) return;
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        resize();
+        loop();
+    </script>
+</body>
+</html>
